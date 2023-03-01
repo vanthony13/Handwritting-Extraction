@@ -1,14 +1,9 @@
-# inferenceModel.py
 import cv2
 import typing
 import numpy as np
 
-
-
-
-
 from mltu.inferenceModel import OnnxInferenceModel
-from mltu.utils.text_utils import ctc_decoder, get_cer
+from mltu.utils.text_utils import ctc_decoder, get_cer, get_wer
 
 class ImageToWordModel(OnnxInferenceModel):
     def __init__(self, char_list: typing.Union[str, list], *args, **kwargs):
@@ -37,20 +32,19 @@ if __name__ == "__main__":
 
     df = pd.read_csv("Models/03_handwriting_recognition/202301111911/val.csv").values.tolist()
 
-    accum_cer = []
-
-
+    accum_cer, accum_wer = [], []
     for image_path, label in tqdm(df):
         image = cv2.imread(image_path)
+
         try:
             prediction_text = model.predict(image)
 
             cer = get_cer(prediction_text, label)
-            print(f"Image: {image_path}, Label: {label}, Prediction: {prediction_text}, CER: {cer}")
+            wer = get_wer(prediction_text, label)
+            print(f"Image: {image_path}; Label: ({label}); Prediction: ({prediction_text}); CER: {cer}; WER: {wer}")
 
             accum_cer.append(cer)
-
-            # resize image by 4 times for visualization
+            accum_wer.append(wer)
             image = cv2.resize(image, (image.shape[1] * 3, image.shape[0] * 3))
             cv2.imshow(prediction_text, image)
             cv2.waitKey(0)
@@ -58,4 +52,4 @@ if __name__ == "__main__":
         except:
             continue
 
-    print(f"Average CER: {np.average(accum_cer)}")
+    print(f"Average CER: {np.average(accum_cer)}, Average WER: {np.average(accum_wer)}")

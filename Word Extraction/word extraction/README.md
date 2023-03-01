@@ -8,7 +8,7 @@ There are two most popular methods that we could use to extract text from images
 - We can localize text in images using text detectors or segmentation techniques, then extract localized text (more straightforward way);
 - We can train a model that achieves both text detection and recognition within a single model (the hard way);
 
-I will focus only on a word extraction part from the whole OCR pipeline:
+In this tutorial, I will focus only on a word extraction part from the whole OCR pipeline:
 ![alt text](https://pylessons.com/media/Tutorials/TensorFlow-CAPTCHA-solver/ctc-text-recognition/Pipeline.png)
 
 But, it's valuable to know the pipeline of the most popular OCRs available today. As I said, most pipelines contain a Text Detection step and Text Recognition steps:
@@ -21,6 +21,8 @@ Text detection is very similar to the Object Detection task, where the object wh
 But it was proven that we could achieve even better results by using various segmentation techniques instead of using detectors. Exploring each character and the spacings between characters helps to detect various shaped texts.[1]
 
 For text detection, you can choose other popular techniques. But, as I already mentioned, it would be too complex and an extensive tutorial to cover both. So, I will focus on explaining the CTC networks for text recognition. 
+
+I noticed that when developing various things, I must reimplement things I was already using over and over. So why not simplify this by creating a library to hold all this stuff? With this tutorial, I am starting a new MLTU (Machine Learning Training Utilities) library that I will open source on [GitHub](https://github.com/pythonlessons/mltu), where I'll save all tutorial code there.
 
 ## Text Recognition Pipeline:
 ![alt text](https://pylessons.com/media/Tutorials/TensorFlow-CAPTCHA-solver/ctc-text-recognition/Text_recognition_model.png)

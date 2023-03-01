@@ -7,7 +7,7 @@ from mltu.augmentors import RandomBrightness, RandomRotate, RandomErodeDilate
 try: [tf.config.experimental.set_memory_growth(gpu, True) for gpu in tf.config.experimental.list_physical_devices('GPU')]
 except: pass
 
-from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, TensorBoard
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, TensorBoard, Callback
 
 from mltu.dataProvider import DataProvider
 from mltu.preprocessors import ImageReader
@@ -23,6 +23,23 @@ from tqdm import tqdm
 from urllib.request import urlopen
 from io import BytesIO
 from zipfile import ZipFile
+import os
+
+class TrainLogger(Callback):
+    def __init__(self, log_dir):
+        super().__init__()
+        self.log_dir = log_dir
+
+    def on_train_begin(self, logs=None):
+        self.train_loss_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train_loss'))
+        self.train_cer_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train_cer'))
+
+    def on_epoch_end(self, epoch, logs=None):
+        with self.train_loss_writer.as_default():
+            tf.summary.scalar('loss', logs['loss'], step=epoch)
+        with self.train_cer_writer.as_default():
+            tf.summary.scalar('cer', logs['CER'], step=epoch)
+
 
 def download_and_unzip(url, extract_to='Datasets', chunk_size=1024*1024):
     http_response = urlopen(url)
@@ -35,17 +52,18 @@ def download_and_unzip(url, extract_to='Datasets', chunk_size=1024*1024):
     zipfile = ZipFile(BytesIO(data))
     zipfile.extractall(path=extract_to)
 
-dataset_path = stow.join('Datasets', 'IAM_Words')
-if not stow.exists(dataset_path):
+
+dataset_path = 'Datasets/IAM_Words'
+if not os.path.exists(dataset_path):
     download_and_unzip('https://git.io/J0fjL', extract_to='Datasets')
 
-    file = tarfile.open(stow.join(dataset_path, "words.tgz"))
-    file.extractall(stow.join(dataset_path, "words"))
+    file = tarfile.open(os.path.join(dataset_path, "words.tgz"))
+    file.extractall(os.path.join(dataset_path, "words"))
 
 dataset, vocab, max_len = [], set(), 0
 
 # Preprocess the dataset by the specific IAM_Words dataset file structure
-words = open(stow.join(dataset_path, "words.txt"), "r").readlines()
+words = open(os.path.join(dataset_path, "words.txt"), "r").readlines()
 for line in tqdm(words):
     if line.startswith("#"):
         continue
@@ -59,8 +77,8 @@ for line in tqdm(words):
     file_name = line_split[0] + ".png"
     label = line_split[-1].rstrip('\n')
 
-    rel_path = stow.join(dataset_path, "words", folder1, folder2, file_name)
-    if not stow.exists(rel_path):
+    rel_path = os.path.join(dataset_path, "words", folder1, folder2, file_name)
+    if not os.path.exists(rel_path):
         continue
 
     dataset.append([rel_path, label])
@@ -93,34 +111,51 @@ train_data_provider, val_data_provider = data_provider.split(split = 0.9)
 # Augment training data with random brightness, rotation and erode/dilate
 train_data_provider.augmentors = [RandomBrightness(), RandomRotate(), RandomErodeDilate()]
 
-# Creating TensorFlow model architecture
-model = train_model(
-    input_dim = (configs.height, configs.width, 3),
-    output_dim = len(configs.vocab),
-)
+# Check if there is a previously trained model and load it if found
+previous_epoch = 0
+if stow.exists(configs.checkpoint_path):
+    model = tf.keras.models.load_model(configs.checkpoint_path, custom_objects={'CTCloss': CTCloss, 'CWERMetric': CWERMetric})
+    previous_epoch = configs.train_epochs - len(model.history.history['val_CER'])
 
-# Compile the model and print summary
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=configs.learning_rate),
-    loss=CTCloss(),
-    metrics=[CWERMetric(padding_token=len(configs.vocab) )],
-    run_eagerly=False
-)
-model.summary(line_length=110)
+    # Replace old callbacks with new ones
+    checkpoint = ModelCheckpoint(configs.checkpoint_path, monitor='val_CER', verbose=1, save_best_only=False, mode='min')
+    earlystopper = EarlyStopping(monitor='val_CER', patience=20, verbose=1)
+    trainLogger = TrainLogger(configs.model_path)
+    tb_callback = TensorBoard(f'{configs.model_path}/logs', update_freq=1)
+    reduceLROnPlat = ReduceLROnPlateau(monitor='val_CER', factor=0.9, min_delta=1e-10, patience=10, verbose=1, mode='auto')
+    model2onnx = Model2onnx(f"{configs.model_path}/model.h5")
+    model.callbacks = [earlystopper, checkpoint, trainLogger, reduceLROnPlat, tb_callback, model2onnx]
 
-# Define callbacks
-earlystopper = EarlyStopping(monitor='val_CER', patience=20, verbose=1)
-checkpoint = ModelCheckpoint(f"{configs.model_path}/model.h5", monitor='val_CER', verbose=1, save_best_only=False, mode='min')
-trainLogger = TrainLogger(configs.model_path)
-tb_callback = TensorBoard(f'{configs.model_path}/logs', update_freq=1)
-reduceLROnPlat = ReduceLROnPlateau(monitor='val_CER', factor=0.9, min_delta=1e-10, patience=10, verbose=1, mode='auto')
-model2onnx = Model2onnx(f"{configs.model_path}/model.h5")
+else:
+    # Creating TensorFlow model architecture
+    model = train_model(
+        input_dim = (configs.height, configs.width, 3),
+        output_dim = len(configs.vocab),
+    )
+
+    # Compile the model and print summary
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=configs.learning_rate),
+        loss=CTCloss(),
+        metrics=[CWERMetric(padding_token=len(configs.vocab) )],
+        run_eagerly=False
+    )
+    model.summary(line_length=110)
+
+    # Define callbacks
+    earlystopper = EarlyStopping(monitor='val_CER', patience=20, verbose=1)
+    checkpoint = ModelCheckpoint(configs.checkpoint_path, monitor='val_CER', verbose=1, save_best_only=False, mode='min')
+    trainLogger = TrainLogger(configs.model_path)
+    tb_callback = TensorBoard(f'{configs.model_path}/logs', update_freq=1)
+    reduceLROnPlat = ReduceLROnPlateau(monitor='val_CER', factor=0.9, min_delta=1e-10, patience=10, verbose=1, mode='auto')
+    model2onnx = Model2onnx(f"{configs.model_path}/model.h5")
 
 # Train the model
 model.fit(
     train_data_provider,
     validation_data=val_data_provider,
     epochs=configs.train_epochs,
+    initial_epoch=0,
     callbacks=[earlystopper, checkpoint, trainLogger, reduceLROnPlat, tb_callback, model2onnx],
     workers=configs.train_workers
 )
