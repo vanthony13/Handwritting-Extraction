@@ -1,31 +1,34 @@
 import os
 import csv
 import cv2
-import pytesseract
+import keras_ocr
 from Levenshtein import distance
 import matplotlib.pyplot as plt
 
 # Set the path to the dataset
-dataset_path = r"C:\Users\Vitoria\Desktop\TFC\mltu-main (copy)\Word Extraction\word extraction\Datasets\Testing"
+dataset_path = r"C:\Users\Vitoria\Desktop\mltu-main (copy)\Word Extraction\word extraction\Datasets\Testing"
 
 # Create lists to store the CER values and the image filenames
 cer_values = []
 acc_values = []
 image_filenames = []
 
-# Configure the pytesseract executable path
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Initialize the Keras-OCR pipeline
+pipeline = keras_ocr.pipeline.Pipeline()
 
 # Loop over all the images in the dataset directory
 for filename in os.listdir(dataset_path):
     if filename.endswith(".png"):
-        # Load the image and convert it to grayscale
+        # Load the image and resize it
         image_path = os.path.join(dataset_path, filename)
         image = cv2.imread(image_path)
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        image = cv2.resize(image, (640, 640))
 
-        # Use pytesseract to extract the text from the image
-        text = pytesseract.image_to_string(gray).strip()
+        # Use Keras-OCR to extract the text from the image
+        predictions = pipeline.recognize([image])[0]
+
+        # Extract the predicted text from the Keras-OCR result
+        text = "".join([x[0] for x in predictions])
 
         # Get the label from the filename
         label = os.path.splitext(filename)[0]
@@ -65,20 +68,20 @@ with open("acc_results.csv", "w", newline="") as csvfile:
 
 # Generate the CER graph
 plt.plot(image_filenames, cer_values)
-plt.title("Character Error Rate (CER) for pytesseract")
+plt.title("Character Error Rate (CER) for Keras-OCR")
 plt.xlabel("Image filename")
 plt.xticks(rotation=90)
 plt.ylabel("CER")
 plt.tight_layout()
-plt.savefig("cer_graph_pytesseract.png")
+plt.savefig("cer_graph_keras_ocr.png")
 plt.show()
 
 # Generate the accuracy graph
 plt.plot(image_filenames, acc_values)
-plt.title("Accuracy for pytesseract")
+plt.title("Accuracy for Keras-OCR")
 plt.xlabel("Image filename")
 plt.xticks(rotation=90)
 plt.ylabel("Accuracy")
 plt.tight_layout()
-plt.savefig("accuracy_graph_pytesseract.png")
+plt.savefig("accuracy_graph_keras_ocr.png")
 plt.show()

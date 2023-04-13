@@ -50,7 +50,7 @@ if __name__ == "__main__":
             # resize image by 4 times for visualization
             image = cv2.resize(image, (image.shape[1] * 1, image.shape[0] * 1))
             cv2.imshow("Prediction", image)
-            cv2.waitKey(0)
+            #cv2.waitKey(0)
             cv2.destroyAllWindows()
         except:
             continue

@@ -5,11 +5,18 @@ import easyocr
 from Levenshtein import distance
 import matplotlib.pyplot as plt
 
-# Set the path to the dataset
-dataset_path = r"C:\Users\Vitoria\Desktop\mltu-main (copy)\Word Extraction\word extraction\Datasets\Testing"
+def wer(predicted_text, ground_truth):
+    predicted_words = predicted_text.split()
+    ground_truth_words = ground_truth.split()
+    wer_value = distance(predicted_words, ground_truth_words) / max(len(predicted_words), len(ground_truth_words))
+    return wer_value
 
-# Create lists to store the CER values and the image filenames
+# Set the path to the dataset
+dataset_path = r"C:\Users\Vitoria\Desktop\TFC\mltu-main (copy)\Word Extraction\word extraction\Datasets\Testing"
+
+# Create lists to store the CER values, WER values, and image filenames
 cer_values = []
+wer_values = []
 acc_values = []
 image_filenames = []
 
@@ -37,6 +44,10 @@ for filename in os.listdir(dataset_path):
         cer_value = distance(text, label) / max(len(text), len(label))
         cer_values.append(cer_value)
 
+        # Calculate the WER and append it to the list of WER values
+        wer_value = wer(text, label)
+        wer_values.append(wer_value)
+
         # Calculate the accuracy and append it to the list of accuracy values
         accuracy = (1 - cer_value) * 100
         acc_values.append(accuracy)
@@ -44,12 +55,14 @@ for filename in os.listdir(dataset_path):
         # Append the image filename to the list of image filenames
         image_filenames.append(filename)
 
-# Calculate the average CER and accuracy
+# Calculate the average CER, WER, and accuracy
 avg_cer = sum(cer_values) / len(cer_values)
+avg_wer = sum(wer_values) / len(wer_values)
 avg_acc = sum(acc_values) / len(acc_values)
 
-# Print the average CER and accuracy
+# Print the average CER, WER, and accuracy
 print("\nAverage CER:", avg_cer)
+print("\nAverage WER:", avg_wer)
 print("\nAverage accuracy:", avg_acc)
 
 # Write the CER values and image filenames to a CSV file
@@ -59,6 +72,13 @@ with open("cer_results.csv", "w", newline="") as csvfile:
     for i in range(len(cer_values)):
         writer.writerow([image_filenames[i], cer_values[i]])
 
+# Write the WER values and image filenames to a CSV file
+with open("wer_results.csv", "w", newline="") as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(["Filename", "WER"])
+    for i in range(len(wer_values)):
+        writer.writerow([image_filenames[i], wer_values[i]])
+
 # Write the accuracy values and image filenames to a CSV file
 with open("acc_results.csv", "w", newline="") as csvfile:
     writer = csv.writer(csvfile)
@@ -66,7 +86,6 @@ with open("acc_results.csv", "w", newline="") as csvfile:
     for i in range(len(acc_values)):
         writer.writerow([image_filenames[i], acc_values[i]])
 
-# Generate the CER graph
 plt.plot(image_filenames, cer_values)
 plt.title("Character Error Rate (CER) for EasyOCR")
 plt.xlabel("Image filename")
@@ -76,7 +95,17 @@ plt.tight_layout()
 plt.savefig("cer_graph_easyocr.png")
 plt.show()
 
-# Generate the accuracy graph
+
+plt.plot(image_filenames, wer_values)
+plt.title("Word Error Rate (WER) for EasyOCR")
+plt.xlabel("Image filename")
+plt.xticks(rotation=90)
+plt.ylabel("WER")
+plt.tight_layout()
+plt.savefig("wer_graph_easyocr.png")
+plt.show()
+
+
 plt.plot(image_filenames, acc_values)
 plt.title("Accuracy for EasyOCR")
 plt.xlabel("Image filename")
